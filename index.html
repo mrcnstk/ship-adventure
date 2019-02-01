@@ -1,0 +1,262 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Ship Adventure</title>
+    <script src="//cdn.jsdelivr.net/phaser/2.5.0/phaser.min.js"></script>
+</head>
+
+<body>
+
+    <script type="text/javascript">
+
+        var sprite; //POSTAĆ (ŁÓDKA)
+        var group; //SKAŁY
+        var group2; //MONETY
+        var zycie = 3; // ILOSC ŻYĆ
+        var wyswietlZycie; // WYSWIETLA ZYCIE NA EKRANIE
+        var counter = 0; // OBSŁUGA CZASU WEWNĄTRZ GRY 
+        var predkosc = -120, coinSpeed = -100; //POCZĄTKOWA PRĘDKOŚĆ SKAŁ I MONET
+        var cursors; //ZMIENNA DO STEROWANIA KLAWISZAMI
+        var text; // WYŚWIETLA CZAS NA EKRANIE
+        var TextLevel; // OBSŁUGA WYŚWIETLANIA NAZW POZIOMÓW NA EKRANIE
+        var timerRock, timerCoin; //STEROWANIE CZĘSTOŚCIĄ "WYSKAKIWANIA" MONET I SKAŁ
+        var mode = false, fireMode = false; // "PRZEŁĄCZNIKI" TRYBU STRZELANIA ORAZ KONTROLA WYKONANIA FUNKCJI
+        var bullet, bullets, bulletTime = 0; //ZMIENNE DO STRZELANIA
+
+        //DEKLARACJA PODSTAWOWYCH FUNKCJI GRY
+        var game = new Phaser.Game(800, 600, Phaser.AUTO, 'phaser', { preload: preload, create: create, update: update, render: render });
+
+        function preload() {
+            //WCZYTANIE GRAFIK--------------------------------------------
+            game.load.spritesheet('ship', 'images/ships.png', 32, 32);
+            game.load.image('rock', 'images/asteroid3.png');
+            game.load.spritesheet('coin', 'images/coin.png', 32, 32);
+            game.load.image('bullet', 'images/bullet.png');
+            //------------------------------------------------------------
+        }
+
+        function create() {
+            game.physics.startSystem(Phaser.Physics.ARCADE);
+            game.stage.backgroundColor = '#0072bc';
+
+            //USTAWIENIA POSTACI (ŁÓDKI)-----------------------------------
+            sprite = game.add.sprite(100, 300, 'ship');
+            sprite.anchor.setTo(0.5, 0.5);
+            //sprite.scale.setTo(1, 1);
+            game.physics.enable(sprite, Phaser.Physics.ARCADE);
+            sprite.body.setSize(32, 32, 0, 0);
+            sprite.body.collideWorldBounds = true;
+
+            //ANIMACJA ŁÓDKI------------------------------------------------
+            sprite.animations.add('down', [0, 1, 2], 10, true);
+            sprite.animations.add('left', [12, 13, 14], 10, true);
+            sprite.animations.add('right', [24, 25, 26], 10, true);
+            sprite.animations.add('up', [36, 37, 38], 10, true);
+            //--------------------------------------------------------------
+            //NADANIE FIZYKI ORAZ DEKLARACJA OBSŁUGI KLAWISZY
+            cursors = game.input.keyboard.createCursorKeys();
+            group = game.add.physicsGroup();
+            group2 = game.add.physicsGroup();
+
+            //STRZELANIE----------------------------------------------------
+            bullets = game.add.group();
+            bullets.enableBody = true;
+            bullets.physicsBodyType = Phaser.Physics.ARCADE;
+
+            for (var i = 0; i < 20; i++) {
+                var b = bullets.create(0, 0, 'bullet');
+                b.name = 'bullet' + i;
+                b.exists = false;
+                b.visible = false;
+                b.checkWorldBounds = true;
+                b.events.onOutOfBounds.add(resetBullet, this);
+            }
+            //--------------------------------------------------------------
+            //WYŚWIETLENIE ŻYCIA I CZASU NA EKRANIE ORAZ AKTYWACJA PIERWSZEGO POZIOMU
+            setupGameText();
+            startTimers();
+            level1();
+
+        }
+
+        function setupGameText() {
+            wyswietlZycie = game.add.text(50, 50, "Życie: " + zycie);
+            text = game.add.text(50, 500, 'Czas: 0');
+        }
+        function updateGameStateTexts() {
+            wyswietlZycie.text = "Życie: " + zycie;
+            text.setText('Czas: ' + counter);
+        }
+
+        function startTimers() {
+            game.time.events.loop(Phaser.Timer.SECOND, updateCounter, this);
+        }
+
+        function update() {
+            //OBSŁUGA KLAWISZY --------------------------------------
+            sprite.body.velocity.x = 0;
+
+            if (cursors.left.isDown) {
+                sprite.body.velocity.x = -150;
+                sprite.animations.play('left');
+            }
+            else if (cursors.right.isDown) {
+                sprite.body.velocity.x = 150;
+                sprite.animations.play('right');
+            }
+            else if (cursors.up.isDown) {
+                sprite.body.velocity.y = -150;
+                sprite.animations.play('up');
+            }
+            else if (cursors.down.isDown) {
+                sprite.body.velocity.y = 150;
+                sprite.animations.play('down');
+            }
+            else {
+                sprite.body.velocity.x = 0;
+                sprite.body.velocity.y = 0;
+                sprite.animations.play('right');
+            }
+            if (game.input.keyboard.isDown(Phaser.Keyboard.SPACEBAR))
+                if (fireMode == true) fireBullet();
+
+
+
+            //-------------------------------------------------------------
+            //OBSŁUGA KOLIZJI----------------------------------------------
+            game.physics.arcade.collide(sprite, group, rockCollisionHandler, processHandler, this);
+            game.physics.arcade.collide(sprite, group2, coinCollision, processHandler, this);
+            game.physics.arcade.collide(bullets, group, bulletRockCollision, null, this);
+            updateGameStateTexts();
+            //OBSŁUGA POZIOMÓW---------------------------------------------
+            if (counter === 3) TextLevel.destroy();
+            if (counter === 30)
+                if (mode == false) {
+                    level2();
+                    mode = true;
+                }
+            if (counter === 33) TextLevel.destroy();
+            if (counter === 60)
+                if (mode == true) {
+                    level3();
+                    mode = false;
+                }
+            if (counter === 63) TextLevel.destroy();
+            if (counter === 90)
+                if (mode == false) {
+                    level4();
+                    mode = true;
+                }
+            if (counter === 93) TextLevel.destroy();
+            if (counter === 120)
+                if (mode == true) {
+                    level5();
+                    mode = false;
+                }
+            if (counter === 123) TextLevel.destroy();
+            //--------------------------------------------------------------
+
+        }
+
+        function render() {
+            //  game.debug.bodyInfo(sprite, 32, 32);
+            //  game.debug.body(sprite);
+        }
+
+        function processHandler(sprite, rock) {
+            return true;
+        }
+
+        function bulletRockCollision(bullet, rock) {
+            rock.kill();
+            bullet.kill();
+        }
+
+        function fireBullet() {
+
+            if (game.time.now > bulletTime) {
+                bullet = bullets.getFirstExists(false);
+
+                if (bullet) {
+                    bullet.reset(sprite.x + 10, sprite.y);
+                    bullet.body.velocity.x = 300;
+                    bulletTime = game.time.now + 500;
+                }
+            }
+
+        }
+
+        function resetBullet(bullet) {
+
+            bullet.kill();
+
+        }
+
+        function rockCollisionHandler(sprite, rock) {
+            rock.destroy();
+            zycie -= 1;
+            if (zycie == 0) {
+                alert("Udało ci się przetrwać " + counter + " sekund");
+                game.kill();
+            }
+        }
+
+        function coinCollision(sprite, coin) {
+            zycie += 1;
+            coin.destroy();
+        }
+
+        function updateCounter() {
+            counter++;
+            updateGameStateTexts();
+        }
+
+        function spawnRock() {
+            var c = group.create(850, game.rnd.between(0, 600), 'rock');
+            c.body.velocity.x = predkosc;
+        }
+
+        function spawnCoin() {
+            var coin = group2.create(850, game.rnd.between(0, 600), 'coin');
+            var move = coin.animations.add('rotate');
+            coin.animations.play('rotate', 15, true);
+            coin.body.velocity.x = coinSpeed;
+        }
+
+        function boostRock() {
+            predkosc = predkosc - 2;
+        }
+        //PROJEKTOWANIE POZIOMÓW TRUDNOŚCI-----------------------------------------------
+        function level1() {
+
+            TextLevel = game.add.text(350, 300, 'Poziom 1');
+            timerRock = game.time.events.loop(Phaser.Timer.SECOND / 2, spawnRock, this);
+        }
+        function level2() {
+            TextLevel = game.add.text(350, 300, 'Poziom 2');
+            timerCoin = game.time.events.loop(Phaser.Timer.SECOND * 15, spawnCoin, this);
+            predkosc = predkosc - 50;
+
+        }
+        function level3() {
+            TextLevel = game.add.text(250, 300, 'Poziom 3 - Spacja = strzał!');
+            timerRock = game.time.events.loop(Phaser.Timer.SECOND / 5, spawnRock, this);
+            fireMode = true;
+        }
+        function level4() {
+            TextLevel = game.add.text(350, 300, 'Poziom 4');
+            predkosc = predkosc - 50;
+        }
+        function level5() {
+            TextLevel = game.add.text(200, 300, 'Poziom 5 - przetrwaj jak najdłużej!');
+            game.time.events.loop(Phaser.Timer.SECOND, boostRock, this); //Co sekunde przyspiesza kamienie
+        }
+
+
+    </script>
+
+</body>
+
+</html>
